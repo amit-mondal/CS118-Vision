@@ -7,11 +7,20 @@ import gc
 from sklearn import neighbors, svm, cluster, preprocessing
 from sklearn.neighbors import KNeighborsClassifier
 
-NUM_FEATURES=40
 
-feature_detectors = {'sift' : cv2.xfeatures2d.SIFT_create(nfeatures=NUM_FEATURES), 'orb' : cv2.ORB_create(nfeatures=NUM_FEATURES), 'surf' : cv2.xfeatures2d.SURF_create(extended=False, hessianThreshold=400)}
+NUM_FEATURES = {
+    'hierarchical' : 25,
+    'kmeans' : 50
+}
 
-fd_cache = {}
+feature_detectors = {'sift' : cv2.xfeatures2d.SIFT_create(nfeatures=50), 'orb' : cv2.ORB_create(nfeatures=50), 'surf' : cv2.xfeatures2d.SURF_create(extended=False, hessianThreshold=400)}
+
+fd_cache = {
+    'sift' : {},
+    'surf' : {},
+    'orb' : {},
+}
+
 
 def load_data():
     test_path = '../data/test/'
@@ -105,10 +114,11 @@ def reportAccuracy(true_labels, predicted_labels):
     accuracy = float(num_correct/predicted_labels.size) * 100
     return accuracy
 
-def getDescriptors(feature_detector, img):
+def getDescriptors(feature_type, img, nfeatures):
+    feature_detector = feature_detectors[feature_type]    
     _, des = feature_detector.detectAndCompute(img, None)
-    if des is not None and des.shape[0] > NUM_FEATURES:
-        return des[np.random.choice(des.shape[0], NUM_FEATURES, replace=False)]
+    if des is not None and des.shape[0] > nfeatures:
+        return des[np.random.choice(des.shape[0], nfeatures, replace=False)]
     return des
 
 def buildDict(train_images, dict_size, feature_type, clustering_type):
@@ -126,22 +136,20 @@ def buildDict(train_images, dict_size, feature_type, clustering_type):
 
     # NOTE: Should you run out of memory or have performance issues, feel free to limit the 
     # number of descriptors you store per image.
-    feature_detector = feature_detectors[feature_type]
     clustering = cluster.AgglomerativeClustering(n_clusters=dict_size, memory='./cache', linkage='single') if clustering_type != 'kmeans' else cluster.KMeans(dict_size)
 
     print(f'building dict for {dict_size} {feature_type} {clustering_type}')
 
-
-    if feature_type not in fd_cache:
+    if clustering_type not in fd_cache[feature_type]:
         descriptors = []
         for img in train_images:
-            des = getDescriptors(feature_detector, img)
+            des = getDescriptors(feature_type, img, NUM_FEATURES[clustering_type])
             if des is None:
                 continue
             descriptors.extend(des)
-        fd_cache[feature_type] = descriptors
+        fd_cache[feature_type][clustering_type] = descriptors
     else:
-        descriptors = fd_cache[feature_type]
+        descriptors = fd_cache[feature_type][clustering_type]
         
     clustering.fit(descriptors)
 
@@ -167,14 +175,13 @@ def computeBow(image, vocabulary, feature_type):
     # used to create the vocabulary
 
     # BOW is the new image representation, a normalized histogram
-    feature_detector = feature_detectors[feature_type]
     clf = KNeighborsClassifier(n_neighbors=1)
     labels = list(range(vocabulary.shape[0]))
     histogram = np.zeros(vocabulary.shape[0])
 
     
     clf.fit(vocabulary, labels)
-    des = getDescriptors(feature_detector, image)
+    des = getDescriptors(feature_type, image, NUM_FEATURES['kmeans'])
     
     if des is None:
         return histogram
