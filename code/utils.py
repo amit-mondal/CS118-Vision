@@ -8,12 +8,12 @@ from sklearn import neighbors, svm, cluster, preprocessing
 from sklearn.neighbors import KNeighborsClassifier
 
 
+MAX_FEATURES = 40
+
 NUM_FEATURES = {
     'hierarchical' : 25,
-    'kmeans' : 50
+    'kmeans' : MAX_FEATURES
 }
-
-feature_detectors = {'sift' : cv2.xfeatures2d.SIFT_create(nfeatures=50), 'orb' : cv2.ORB_create(nfeatures=50), 'surf' : cv2.xfeatures2d.SURF_create(extended=False, hessianThreshold=400)}
 
 fd_cache = {
     'sift' : {},
@@ -115,10 +115,12 @@ def reportAccuracy(true_labels, predicted_labels):
     return accuracy
 
 def getDescriptors(feature_type, img, nfeatures):
+    feature_detectors = {'sift' : cv2.xfeatures2d.SIFT_create(nfeatures=MAX_FEATURES), 'orb' : cv2.ORB_create(nfeatures=MAX_FEATURES), 'surf' : cv2.xfeatures2d.SURF_create()}
     feature_detector = feature_detectors[feature_type]    
     _, des = feature_detector.detectAndCompute(img, None)
     if des is not None and des.shape[0] > nfeatures:
-        return des[np.random.choice(des.shape[0], nfeatures, replace=False)]
+        #return des[np.random.choice(des.shape[0], nfeatures, replace=False)]
+        return des[:nfeatures]
     return des
 
 def buildDict(train_images, dict_size, feature_type, clustering_type):
@@ -160,8 +162,8 @@ def buildDict(train_images, dict_size, feature_type, clustering_type):
         labels = np.unique(clustering.labels_)
         for label in labels:
             indices = [i for i, v in enumerate(clustering.labels_) if v == label]
-            centers.append(np.median(descriptors[indices], axis=0))
-        return centers
+            centers.append(np.mean(descriptors[indices], axis=0))
+        return np.array(centers)
     
     return clustering.cluster_centers_
 
